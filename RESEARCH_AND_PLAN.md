@@ -1,11 +1,11 @@
 # Research and Plan: Azure Chat Assistant (MCP Server)
 
 ## 1. Current Architecture Overview
-*   Single-file implementation: `mcp_voice_assistant.py`
+*   Single-file implementation: `mcp_chat_assistant.py`
 *   Language: Python 3
 *   Network: `urllib.request` (no dependencies)
 *   Concurrency: Thread-based stdin/stdout reader
-*   Configuration: `~/.config/azure-voice-assistant/config.json`
+*   Configuration: `~/.config/azure-chat-assistant/config.json`
 
 ## 2. Latency Breakdown
 *   Request serialization

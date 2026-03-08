@@ -27,7 +27,7 @@ Exposes Azure AI models as MCP tools so AI CLI agents (Claude Code, Gemini CLI, 
 
 ### Configure
 
-Create `~/.config/azure-voice-assistant/config.json`:
+Create `~/.config/azure-chat-assistant/config.json`:
 
 ```json
 {
@@ -47,7 +47,7 @@ Create `~/.config/azure-voice-assistant/config.json`:
   "mcpServers": {
     "azure-chat-assistant": {
       "command": "python3",
-      "args": ["/path/to/azure-chat-assistant/mcp_voice_assistant.py"]
+      "args": ["/path/to/azure-chat-assistant/mcp_chat_assistant.py"]
     }
   }
 }

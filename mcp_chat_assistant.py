@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Azure Voice Assistant MCP Server — standalone voice assistant powered by Azure AI models.
+Azure Chat Assistant MCP Server — standalone chat assistant powered by Azure AI models.
 
 Uses Azure AI Foundry for LLM (GPT-5.3, grok-3, Llama, etc.) and delegates to the
 azure-speech MCP server for TTS/STT when used alongside it, or works as a pure
@@ -26,8 +26,8 @@ import httpx
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-CONFIG_PATH = os.path.expanduser("~/.config/azure-voice-assistant/config.json")
-DB_PATH = os.path.expanduser("~/.config/azure-voice-assistant/sessions.db")
+CONFIG_PATH = os.path.expanduser("~/.config/azure-chat-assistant/config.json")
+DB_PATH = os.path.expanduser("~/.config/azure-chat-assistant/sessions.db")
 
 DEFAULTS = {
     "api_key": "",
@@ -37,7 +37,7 @@ DEFAULTS = {
     "model_type": "deployed",       # "deployed" (OpenAI endpoint) or "serverless" (unified inference)
     "max_completion_tokens": 2048,
     "temperature": 1.0,
-    "system_prompt": "You are a helpful voice assistant. Keep responses concise and conversational.",
+    "system_prompt": "You are a helpful chat assistant. Keep responses concise and conversational.",
     "conversation_max_turns": 50,    # max history turns before auto-trimming
     "voice": "",                     # default TTS voice (empty = use speech config)
     "default_models": ["gpt-5.3-chat", "Meta-Llama-3.1-405B-Instruct", "Phi-4"],  # models for multi_chat when none specified
@@ -595,7 +595,7 @@ async def handle_request(client, req):
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": True}},
-                "serverInfo": {"name": "azure-voice-assistant", "version": "1.2.0-async"},
+                "serverInfo": {"name": "azure-chat-assistant", "version": "1.2.0-async"},
             },
         })
     elif method == "notifications/initialized":

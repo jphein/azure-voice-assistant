@@ -8,7 +8,7 @@ Provides `chat`, `multi_chat`, `configure`, `reset`, and `models` tools over JSO
 - **Runtime**: Python 3, asyncio + httpx (no SDK dependencies beyond httpx)
 - **Streaming**: SSE with producer-consumer queue pattern for real-time token delivery
 - **Concurrency**: `multi_chat` uses `asyncio.wait` to query multiple models in parallel with per-model timeout
-- **Config**: `~/.config/azure-voice-assistant/config.json` — persists API key, endpoint, model settings
+- **Config**: `~/.config/azure-chat-assistant/config.json` — persists API key, endpoint, model settings
 - **Protocol**: MCP v2024-11-05 over stdio
 
 ## Azure AI Foundry Endpoint Types
@@ -64,7 +64,7 @@ multi_speak(segments=[
 | Phi-4 | en-US-JennyNeural |
 
 ## Key Files
-- `mcp_voice_assistant.py` — The MCP server (v1.2.0, async)
+- `mcp_chat_assistant.py` — The MCP server (v1.2.0, async)
 - `test_connection.py` — Connection test script for deployed/serverless models
 - `WISDOM_SCROLL.md` — Refactoring history and council recommendations
 - `RESEARCH_AND_PLAN.md` — Performance optimization roadmap
