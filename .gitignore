@@ -1,4 +1,8 @@
+.claude/
 __pycache__/
 *.pyc
+*.pyo
 .env
 config.json
+*.swp
+*~
