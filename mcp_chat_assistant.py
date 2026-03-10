@@ -42,6 +42,8 @@ DEFAULTS = {
     "voice": "",                     # default TTS voice (empty = use speech config)
     "default_models": ["gpt-5.3-chat", "Meta-Llama-3.1-405B-Instruct", "Phi-4"],  # models for multi_chat when none specified
     "multi_chat_timeout": 15,        # per-model timeout in seconds for multi_chat
+    "google_api_key": "",
+    "google_endpoint": "https://aiplatform.googleapis.com/v1beta1/projects/247492937484/locations/global/endpoints/openapi",
 }
 
 CONFIG = {}
@@ -132,7 +134,7 @@ def save_config():
         if k in DEFAULTS and CONFIG[k] == DEFAULTS[k]:
             continue
         disk[k] = v
-    for k in ("api_key", "endpoint", "deployment", "model", "model_type"):
+    for k in ("api_key", "endpoint", "deployment", "model", "model_type", "google_api_key", "google_endpoint"):
         disk[k] = CONFIG[k]
     with open(CONFIG_PATH, "w") as f:
         json.dump(disk, f, indent=4)
@@ -146,20 +148,36 @@ async def call_llm(client: httpx.AsyncClient, messages, progress_token=None, mod
     """Call Azure AI model with streaming, using a producer-consumer queue. Returns (response_text, usage_dict, latency_ms)."""
     api_key = CONFIG.get("api_key", "")
     endpoint = CONFIG.get("endpoint", "")
-    
+
     deployment = model_override if model_override else CONFIG.get("deployment", "")
     model = model_override if model_override else CONFIG.get("model", deployment)
     model_type = model_type_override if model_type_override else CONFIG.get("model_type", "deployed")
-    
+
     max_tokens = CONFIG.get("max_completion_tokens", 2048)
     temperature = CONFIG.get("temperature", 1.0)
 
-    if not api_key:
-        return "Error: No API key configured. Use configure tool to set api_key.", {}, 0
-    if not endpoint:
-        return "Error: No endpoint configured.", {}, 0
-
-    if model_type == "deployed":
+    if model_type == "google":
+        google_key = CONFIG.get("google_api_key", "")
+        if not google_key:
+            return "Error: No Google API key configured. Use configure tool to set google_api_key.", {}, 0
+        google_ep = CONFIG.get("google_endpoint", DEFAULTS["google_endpoint"])
+        url = f"{google_ep}/chat/completions"
+        body = {
+            "messages": messages,
+            "model": f"google/{model}",
+            "max_tokens": max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        headers = {
+            "x-goog-api-key": google_key,
+            "Content-Type": "application/json",
+        }
+    elif model_type == "deployed":
+        if not api_key:
+            return "Error: No API key configured. Use configure tool to set api_key.", {}, 0
+        if not endpoint:
+            return "Error: No endpoint configured.", {}, 0
         url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-10-21"
         body = {
             "messages": messages,
@@ -167,7 +185,15 @@ async def call_llm(client: httpx.AsyncClient, messages, progress_token=None, mod
             "stream": True,
             "stream_options": {"include_usage": True},
         }
-    else:
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+    else:  # serverless
+        if not api_key:
+            return "Error: No API key configured. Use configure tool to set api_key.", {}, 0
+        if not endpoint:
+            return "Error: No endpoint configured.", {}, 0
         url = f"{endpoint}/models/chat/completions?api-version=2024-05-01-preview"
         body = {
             "messages": messages,
@@ -176,14 +202,13 @@ async def call_llm(client: httpx.AsyncClient, messages, progress_token=None, mod
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
 
     if temperature != 1.0:
         body["temperature"] = temperature
-
-    headers = {
-        "api-key": api_key,
-        "Content-Type": "application/json",
-    }
 
     if progress_token:
         await _send_progress(progress_token, 0.1, f"[{model}] Thinking...")
@@ -399,7 +424,7 @@ async def multi_chat(client, user_message, models=None, progress_token=None):
                 asyncio.create_task(_send_progress(progress_token, ticker_pct / 100, f"⚡ {models_done}/{n} done ({elapsed_ms:.0f}ms)"))
 
     for m in models:
-        m_type = "deployed" if "gpt" in m.lower() else "serverless"
+        m_type = "google" if "gemini" in m.lower() else "deployed" if "gpt" in m.lower() else "serverless"
 
         async def _call_model(model_name, model_type):
             resp, usage, lat = await chat(client, user_message, None, model_name, model_type, cached_history=history)
@@ -514,6 +539,8 @@ TOOLS = [
                     "type": "integer",
                     "description": "Per-model timeout in seconds for multi_chat (default 15)."
                 },
+                "google_api_key": {"type": "string", "description": "Google AI API key for Gemini models."},
+                "google_endpoint": {"type": "string", "description": "Google AI endpoint URL."},
             },
         },
     },
@@ -732,12 +759,13 @@ def _handle_configure(args):
         "api_key", "endpoint", "deployment", "model", "model_type",
         "max_completion_tokens", "temperature", "system_prompt",
         "conversation_max_turns", "voice", "default_models", "multi_chat_timeout",
+        "google_api_key", "google_endpoint",
     }
     updated = []
     for k, v in args.items():
         if k not in settable: continue
-        if k == "api_key": CONFIG[k] = str(v)
-        elif k == "endpoint": CONFIG[k] = str(v).rstrip("/")
+        if k in ("api_key", "google_api_key"): CONFIG[k] = str(v)
+        elif k in ("endpoint", "google_endpoint"): CONFIG[k] = str(v).rstrip("/")
         elif k in ("deployment", "model", "model_type", "system_prompt", "voice"): CONFIG[k] = str(v)
         elif k == "max_completion_tokens": CONFIG[k] = max(1, min(int(v), 128000))
         elif k == "temperature": CONFIG[k] = max(0.0, min(float(v), 2.0))
@@ -745,7 +773,7 @@ def _handle_configure(args):
         elif k == "default_models": CONFIG[k] = list(v) if isinstance(v, list) else [str(v)]
         elif k == "multi_chat_timeout": CONFIG[k] = max(1, min(int(v), 120))
         else: CONFIG[k] = v
-        updated.append(f"{k}={CONFIG[k]}" if k != "api_key" else f"{k}=***{str(v)[-4:]}")
+        updated.append(f"{k}={CONFIG[k]}" if k not in ("api_key", "google_api_key") else f"{k}=***{str(v)[-4:]}")
 
     if updated:
         save_config()
@@ -769,6 +797,11 @@ def _handle_configure(args):
     dm = CONFIG.get("default_models", DEFAULTS["default_models"])
     lines.append(f"  defaults:    {', '.join(dm)}")
     lines.append(f"  timeout:     {CONFIG.get('multi_chat_timeout', DEFAULTS['multi_chat_timeout'])}s")
+    lines.append("")
+    lines.append("[Google AI]")
+    gkey = CONFIG.get("google_api_key", "")
+    lines.append(f"  api_key:     ***{gkey[-4:]}" if gkey else "  api_key:     (not set)")
+    lines.append(f"  endpoint:    {CONFIG.get('google_endpoint', DEFAULTS['google_endpoint'])}")
     return "\n".join(lines)
 
 
@@ -798,20 +831,37 @@ async def _handle_models(client, args, progress_token):
         else:
             marker = " (current)" if m == CONFIG.get("model") else ""
             lines.append(f"  {m}{marker}")
+
+    lines.append("\n[Google AI]")
+    google_models = ["gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"]
+    for m in google_models:
+        if do_test:
+            text, _, latency = await _test_model(client, m, "google")
+            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
+            lines.append(f"  {m}: {status}")
+        else:
+            lines.append(f"  {m}")
     return "\n".join(lines)
 
 
 async def _test_model(client, name, mtype):
     try:
-        if mtype == "deployed":
+        if mtype == "google":
+            google_ep = CONFIG.get("google_endpoint", DEFAULTS["google_endpoint"])
+            url = f"{google_ep}/chat/completions"
+            body = {"messages": [{"role": "user", "content": "hi"}], "model": f"google/{name}", "max_tokens": 10}
+            headers = {"x-goog-api-key": CONFIG.get("google_api_key", ""), "Content-Type": "application/json"}
+        elif mtype == "deployed":
             url = f"{CONFIG['endpoint']}/openai/deployments/{name}/chat/completions?api-version=2024-10-21"
             body = {"messages": [{"role": "user", "content": "hi"}], "max_completion_tokens": 10}
+            headers = {"api-key": CONFIG["api_key"], "Content-Type": "application/json"}
         else:
             url = f"{CONFIG['endpoint']}/models/chat/completions?api-version=2024-05-01-preview"
             body = {"messages": [{"role": "user", "content": "hi"}], "model": name, "max_tokens": 10}
-        
+            headers = {"api-key": CONFIG["api_key"], "Content-Type": "application/json"}
+
         t0 = time.perf_counter()
-        resp = await client.post(url, json=body, headers={"api-key": CONFIG["api_key"]}, timeout=15.0)
+        resp = await client.post(url, json=body, headers=headers, timeout=15.0)
         latency = (time.perf_counter() - t0) * 1000
         if resp.status_code != 200: return f"Error {resp.status_code}", {}, 0
         data = resp.json()
