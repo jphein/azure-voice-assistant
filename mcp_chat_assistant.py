@@ -31,7 +31,7 @@ DB_PATH = os.path.expanduser("~/.config/azure-chat-assistant/sessions.db")
 
 DEFAULTS = {
     "api_key": "",
-    "endpoint": "https://claud-assistant-resource.services.ai.azure.com",
+    "endpoint": "",
     "deployment": "gpt-5.3-chat",
     "model": "gpt-5.3-chat-2026-03-03",
     "model_type": "deployed",       # "deployed" (OpenAI endpoint) or "serverless" (unified inference)
@@ -110,6 +110,15 @@ init_db()
 
 # ── Config management ───────────────────────────────────────────────────────
 
+ENV_MAP = {
+    "api_key":        "AZURE_AI_API_KEY",
+    "endpoint":       "AZURE_AI_ENDPOINT",
+    "google_api_key": "GOOGLE_API_KEY",
+    "google_project": "GOOGLE_PROJECT",
+    "google_region":  "GOOGLE_REGION",
+}
+
+
 def load_config():
     cfg = dict(DEFAULTS)
     if os.path.exists(CONFIG_PATH):
@@ -123,6 +132,11 @@ def load_config():
                 cfg.update(disk)
         except Exception:
             pass
+    # Env vars take precedence over config file
+    for cfg_key, env_key in ENV_MAP.items():
+        val = os.environ.get(env_key, "")
+        if val:
+            cfg[cfg_key] = val
     return cfg
 
 

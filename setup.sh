@@ -25,20 +25,18 @@ if [ ! -f "$CONFIG_DIR/config.json" ]; then
     cat > "$CONFIG_DIR/config.json" << 'EOF'
 {
     "api_key": "",
-    "endpoint": "https://claud-assistant-resource.services.ai.azure.com",
-    "deployment": "gpt-5.3-chat",
-    "model": "gpt-5.3-chat-2026-03-03",
+    "endpoint": "",
+    "deployment": "",
+    "model": "",
     "model_type": "deployed",
-    "max_completion_tokens": 2048,
-    "temperature": 1.0,
-    "system_prompt": "You are a helpful chat assistant. Keep responses concise and conversational.",
-    "conversation_max_turns": 50,
-    "default_models": ["gpt-5.3-chat", "Meta-Llama-3.1-405B-Instruct", "Phi-4"],
-    "multi_chat_timeout": 15
+    "google_api_key": "",
+    "google_project": "",
+    "google_region": "global"
 }
 EOF
     echo ""
-    echo ">>> IMPORTANT: Edit $CONFIG_DIR/config.json and add your Azure AI API key <<<"
+    echo ">>> IMPORTANT: Configure via MCP configure() tool or set env vars: <<<"
+    echo ">>>   AZURE_AI_API_KEY, AZURE_AI_ENDPOINT, GOOGLE_API_KEY, GOOGLE_PROJECT <<<"
     echo ""
 else
     echo "Config already exists at $CONFIG_DIR/config.json"

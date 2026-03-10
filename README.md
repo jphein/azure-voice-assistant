@@ -35,24 +35,37 @@ python3 -m venv venv
 
 ### Configure
 
-The server auto-creates its config directory on first run. To set your API key:
+The server auto-creates its config directory on first run.
 
+**Option 1 — Environment variables** (recommended):
 ```bash
-mkdir -p ~/.config/azure-chat-assistant
-cat > ~/.config/azure-chat-assistant/config.json << 'EOF'
+export AZURE_AI_API_KEY="your-azure-key"
+export AZURE_AI_ENDPOINT="https://your-resource.services.ai.azure.com"
+export GOOGLE_API_KEY="your-vertex-ai-key"
+export GOOGLE_PROJECT="your-gcp-project-id"
+export GOOGLE_REGION="global"
+```
+
+**Option 2 — Config file** (`~/.config/azure-chat-assistant/config.json`):
+```json
 {
-    "api_key": "your-azure-ai-key",
+    "api_key": "your-azure-key",
     "endpoint": "https://your-resource.services.ai.azure.com",
     "deployment": "gpt-5.3-chat",
-    "model_type": "deployed"
+    "model_type": "deployed",
+    "google_api_key": "your-vertex-ai-key",
+    "google_project": "your-gcp-project-id",
+    "google_region": "global"
 }
-EOF
 ```
 
-Or configure at runtime via the `configure` tool:
+**Option 3 — Runtime** via the `configure` tool:
 ```
-configure(api_key="your-azure-ai-key")
+configure(api_key="...", endpoint="...")
+configure(google_api_key="...", google_project="...", google_region="global")
 ```
+
+Env vars take precedence over config file values.
 
 ### Register with your CLI agent
 
