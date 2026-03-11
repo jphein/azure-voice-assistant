@@ -205,7 +205,7 @@ async def call_llm(client: httpx.AsyncClient, messages, progress_token=None, mod
             return "Error: No API key configured. Use configure tool to set api_key.", {}, 0
         if not endpoint:
             return "Error: No endpoint configured.", {}, 0
-        url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-10-21"
+        url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-12-01-preview"
         body = {
             "messages": messages,
             "max_completion_tokens": max_tokens,
@@ -884,7 +884,7 @@ async def _test_model(client, name, mtype):
             body = {"messages": [{"role": "user", "content": "hi"}], "model": f"google/{name}", "max_tokens": 10}
             headers = {"x-goog-api-key": CONFIG.get("google_api_key", ""), "Content-Type": "application/json"}
         elif mtype == "deployed":
-            url = f"{CONFIG['endpoint']}/openai/deployments/{name}/chat/completions?api-version=2024-10-21"
+            url = f"{CONFIG['endpoint']}/openai/deployments/{name}/chat/completions?api-version=2024-12-01-preview"
             body = {"messages": [{"role": "user", "content": "hi"}], "max_completion_tokens": 10}
             headers = {"api-key": CONFIG["api_key"], "Content-Type": "application/json"}
         else:
@@ -940,7 +940,7 @@ async def main():
             if api_key and endpoint:
                 try:
                     await client.post(
-                        f"{endpoint}/openai/deployments/{CONFIG.get('deployment', '')}/chat/completions?api-version=2024-10-21",
+                        f"{endpoint}/openai/deployments/{CONFIG.get('deployment', '')}/chat/completions?api-version=2024-12-01-preview",
                         json={"messages": [{"role": "user", "content": "warmup"}], "max_completion_tokens": 1},
                         headers={"api-key": api_key},
                         timeout=10.0,

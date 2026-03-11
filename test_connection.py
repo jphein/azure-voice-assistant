@@ -21,7 +21,7 @@ def test_deployed_model(cfg):
         "max_completion_tokens": 64
     }).encode()
 
-    url = f"{cfg['endpoint']}/openai/deployments/{cfg['deployment']}/chat/completions?api-version=2024-10-21"
+    url = f"{cfg['endpoint']}/openai/deployments/{cfg['deployment']}/chat/completions?api-version=2024-12-01-preview"
     req = urllib.request.Request(url, data=payload, headers={
         "api-key": cfg["api_key"],
         "Content-Type": "application/json"
