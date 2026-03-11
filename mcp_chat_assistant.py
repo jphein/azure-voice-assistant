@@ -266,8 +266,9 @@ async def call_llm(client: httpx.AsyncClient, messages, progress_token=None, mod
                     await queue.put(SENTINEL)
                     return
                 elif resp.status_code == 400:
-                    _model_status[model] = "Filter Triggered"
-                    state["error"] = f"**[{model}]** declined to answer (Content Filter). Try rephrasing your request."
+                    body_text = await resp.aread()
+                    _model_status[model] = "Error 400"
+                    state["error"] = f"**[{model}]** Error 400: {body_text.decode()[:500]}"
                     await queue.put(SENTINEL)
                     return
                 else:
