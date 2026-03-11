@@ -452,7 +452,7 @@ async def multi_chat(client, user_message, models=None, progress_token=None):
                 asyncio.create_task(_send_progress(progress_token, ticker_pct / 100, f"⚡ {models_done}/{n} done ({elapsed_ms:.0f}ms)"))
 
     for m in models:
-        m_type = "google" if "gemini" in m.lower() else "deployed" if "gpt" in m.lower() else "serverless"
+        m_type = "google" if "gemini" in m.lower() else "deployed" if "gpt" in m.lower() or "o1" in m.lower() or "o3" in m.lower() else "serverless"
 
         async def _call_model(model_name, model_type):
             resp, usage, lat = await chat(client, user_message, None, model_name, model_type, cached_history=history)
