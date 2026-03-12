@@ -1,85 +1,67 @@
 # Azure Chat Assistant — MCP Server
 
-## What This Is
-A lean MCP server that bridges local AI CLI tools to Azure AI Foundry models.
-Provides `chat`, `multi_chat`, `configure`, `reset`, and `models` tools over JSON-RPC 2.0 stdio.
+Single-file Python MCP server bridging Claude Code to Azure AI Foundry models.
+
+## File Map
+- `mcp_chat_assistant.py` — The entire server (1009 lines, async)
+- `test_connection.py` — Standalone connection test (uses urllib, not async)
+- `WISDOM_SCROLL.md` — Refactoring history and council recommendations
+- `FORWARD_GUIDE.md` — Future roadmap (phases, council blueprint)
+- `RESEARCH_AND_PLAN.md` — Performance research (latency, caching, optimization)
+
+## Do NOT Read
+- `venv/` — Python virtualenv, never modify
+- `WISDOM_SCROLL.md`, `FORWARD_GUIDE.md`, `RESEARCH_AND_PLAN.md` — Reference docs only, not needed for code changes
+
+## Code Structure (`mcp_chat_assistant.py`)
+| Lines | Section |
+|-------|---------|
+| 29-57 | Config defaults, globals, constants |
+| 59-111 | SQLite session DB (`init_db`, `get_history`, `add_message`, `clear_session`) |
+| 113-161 | Config load/save with env var override (`ENV_MAP`, `load_config`, `save_config`) |
+| 163-170 | `_google_base_url()` — Vertex AI URL builder |
+| 174-378 | `call_llm()` — Core LLM call with SSE streaming (producer-consumer queue) |
+| 382-432 | `chat()` — Conversation manager (history, cache, fallback) |
+| 434-543 | `multi_chat()` — Parallel multi-model dispatch with progress tracking |
+| 547-683 | `TOOLS` list — MCP tool definitions (JSON schema) |
+| 686-707 | `handle_request()` — MCP JSON-RPC router |
+| 709-820 | `_run_tool()` — Tool execution dispatch |
+| 822-920 | Helper functions (`_handle_configure`, `_handle_models`, `_test_model`) |
+| 949-1009 | MCP transport (`_send_progress`, `_write_response`, `main` event loop) |
 
 ## Architecture
-- **Runtime**: Python 3, asyncio + httpx (no SDK dependencies beyond httpx)
-- **Streaming**: SSE with producer-consumer queue pattern for real-time token delivery
-- **Concurrency**: `multi_chat` uses `asyncio.wait` to query multiple models in parallel with per-model timeout
-- **Config**: `~/.config/azure-chat-assistant/config.json` — persists API key, endpoint, model settings
-- **Protocol**: MCP v2024-11-05 over stdio
+- **Runtime**: Python 3, asyncio + httpx (only external dep)
+- **Streaming**: SSE with `asyncio.Queue` producer-consumer pattern
+- **Concurrency**: `multi_chat` uses `asyncio.wait` with per-model timeout
+- **Config**: `~/.config/azure-chat-assistant/config.json`
+- **Sessions**: SQLite at `~/.config/azure-chat-assistant/sessions.db`
+- **Protocol**: MCP v2024-11-05 over stdio, JSON-RPC 2.0
 
-## Azure AI Foundry Endpoint Types
-- **Deployed** (OpenAI-compat): `/openai/deployments/{name}/chat/completions` — used for GPT models
-- **Serverless** (unified inference): `/models/chat/completions` — used for grok-3, Llama, DeepSeek, Phi
+## Endpoint Types
+| Type | URL Pattern | Used For |
+|------|-------------|----------|
+| deployed | `/openai/deployments/{name}/chat/completions` | GPT models |
+| serverless | `/models/chat/completions` | Llama, DeepSeek, Phi, Grok |
+| google | Vertex AI `/chat/completions` | Gemini models |
 
-## Available Models (Azure Sponsorship)
-| Model | Type | Notes |
-|-------|------|-------|
-| gpt-5.3-chat | deployed | Primary. Temperature must be 1.0 (rejects other values) |
-| grok-3 | serverless | Free tier: 15 req/day. Often unavailable |
-| Meta-Llama-3.1-405B-Instruct | serverless | Free tier: 15 req/day |
-| DeepSeek-R1 | serverless | Outputs `<think>` tags despite instructions. Often unavailable |
-| Phi-4 | serverless | Free tier: 15 req/day. Can be slow (cold start 30-70s) |
+## MCP Tools (11)
+`chat`, `multi_chat`, `configure`, `reset`, `clear_cache`, `status`, `models`, `create_session`, `switch_session`, `delete_session`, `list_sessions`
 
-## Multi-Chat Features (v1.2.0)
-- **Default models**: Configurable via `configure(default_models=[...])`. Defaults: gpt-5.3-chat, Llama 405B, Phi-4
-- **Per-model timeout**: Configurable via `configure(multi_chat_timeout=15)`. Slow models get skipped cleanly
-- **Per-model latency**: Each response shows `(1234ms)` timing
-- **Wall time summary**: Footer shows total time + responded/timed-out counts
-- **No history pollution**: multi_chat does not save to session DB (prevents echo between models)
-- **Progress tracking**: Coordinated progress bar — 0% start, increments as each model completes
+## Model Quirks
+- **GPT-5.3**: Rejects `temperature` != 1.0 — code only sends temp when != 1.0
+- **Reasoning models** (o1/o3/o4): Use `developer` role, `max_completion_tokens`, non-streaming, 120s timeout
+- **DeepSeek R1**: Outputs `<think>` tags regardless of system prompt
+- **Serverless free tier**: 15 req/day per model
 
-## 4-Way Voice Call Flow
-This server pairs with [azure-speech](../speech-to-cli/) MCP server for voice I/O.
-Optimized 2-call flow: `multi_chat` (parallel LLM) → `multi_speak` (parallel TTS).
+## Env Vars (override config file)
+`AZURE_AI_API_KEY`, `AZURE_AI_ENDPOINT`, `GOOGLE_API_KEY`, `GOOGLE_PROJECT`, `GOOGLE_REGION`
 
-### Step 1: multi_chat
-```
-multi_chat(message="What do you think about X?")
-→ Queries all default_models in parallel
-→ Returns combined responses with latency
+## How to Run
+```bash
+./venv/bin/python3 mcp_chat_assistant.py   # starts MCP stdio server
+python3 test_connection.py                  # test model connectivity
 ```
 
-### Step 2: multi_speak
-```
-multi_speak(segments=[
-  {text: "Claude's intro", voice: "en-US-AvaNeural"},
-  {text: "GPT response", voice: "en-US-DavisNeural"},
-  {text: "Llama response", voice: "en-US-AndrewNeural"},
-  {text: "Phi response", voice: "en-US-JennyNeural"}
-])
-→ All TTS fires in parallel, plays back-to-back
-```
-
-### Voice Assignments
-| Model | Voice |
-|-------|-------|
-| Claude (host) | en-US-AvaNeural |
-| GPT-5.3 | en-US-DavisNeural |
-| Llama 405B | en-US-AndrewNeural |
-| DeepSeek R1 | en-US-BrianNeural |
-| Phi-4 | en-US-JennyNeural |
-
-## Key Files
-- `mcp_chat_assistant.py` — The MCP server (v1.2.0, async)
-- `test_connection.py` — Connection test script for deployed/serverless models
-- `WISDOM_SCROLL.md` — Refactoring history and council recommendations
-- `RESEARCH_AND_PLAN.md` — Performance optimization roadmap
-
-## Reasoning Model Support (o1, o3, o4)
-Reasoning models need special handling (line 186-264):
-- Use `"developer"` role instead of `"system"` for system prompts
-- Use `max_completion_tokens` instead of `max_tokens` in request body
-- Non-streaming only (no SSE) — uses synchronous POST with 120s timeout
-- `reasoning_effort` configurable (default "high")
-- Deployed path (line 221) already uses `max_completion_tokens`; serverless/Google paths use `max_tokens` which gets swapped at line 252
-
-## Known Issues
-- GPT-5.3 rejects `temperature` != 1.0 — the code only sends temperature when it differs from 1.0
-- DeepSeek R1 includes `<think>` tags regardless of system prompt
-- Serverless free-tier models have 15 req/day limit
-- Grok-3 and DeepSeek-R1 frequently unavailable due to Azure sponsorship limits
-- multi_chat does not save per-model history (by design — prevents cross-model echo)
+## Voice Integration
+Pairs with `../speech-to-cli/` MCP server. Flow: `multi_chat` -> `multi_speak`.
+Voice map: GPT=DavisNeural, Llama=AndrewNeural, DeepSeek=BrianNeural, Phi=JennyNeural, Claude=AvaNeural.

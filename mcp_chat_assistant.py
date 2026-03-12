@@ -591,7 +591,7 @@ TOOLS = [
                 "endpoint": {"type": "string"},
                 "deployment": {"type": "string"},
                 "model": {"type": "string"},
-                "model_type": {"type": "string", "enum": ["deployed", "serverless"]},
+                "model_type": {"type": "string", "enum": ["deployed", "serverless", "google"]},
                 "max_completion_tokens": {"type": "integer"},
                 "temperature": {"type": "number"},
                 "system_prompt": {"type": "string"},
@@ -661,13 +661,8 @@ TOOLS = [
         },
     },
     {
-        "name": "clear_cache",
-        "description": "Clear the in-memory response cache.",
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "status",
-        "description": "Show the current status and availability of models.",
+        "name": "list_sessions",
+        "description": "List all available chat sessions.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
