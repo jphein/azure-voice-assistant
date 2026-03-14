@@ -26,7 +26,7 @@ import sys
 import time
 import sqlite3
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import httpx
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -121,6 +121,8 @@ def init_db():
                 FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE
             )
         """)
+        # Index for fast history lookups
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_name)")
         # Ensure default session exists
         conn.execute("INSERT OR IGNORE INTO sessions (name) VALUES ('default')")
 
@@ -225,7 +227,6 @@ def _aws_sign(method, url, headers, payload, region, service="bedrock"):
     if not access_key or not secret_key:
         return headers
 
-    from urllib.parse import urlparse
     parsed = urlparse(url)
     host = parsed.netloc
     uri = parsed.path or "/"
@@ -310,10 +311,12 @@ async def call_bedrock(client: httpx.AsyncClient, messages, progress_token=None,
         if resp.status_code == 200:
             _model_status[model_name] = "OK"
             data = resp.json()
-            response_text = ""
-            for block in data.get("output", {}).get("message", {}).get("content", []):
-                if "text" in block:
-                    response_text += block["text"]
+            # Fast path: extract text directly
+            try:
+                blocks = data["output"]["message"]["content"]
+                response_text = "".join(b["text"] for b in blocks if "text" in b)
+            except (KeyError, TypeError):
+                response_text = ""
             return response_text, data.get("usage", {}), latency
         elif resp.status_code == 429:
             _model_status[model_name] = "Rate Limited"
@@ -1064,45 +1067,68 @@ async def _handle_models(client, args, progress_token):
     endpoint = CONFIG.get("endpoint", "")
     if not api_key or not endpoint: return "Error: api_key and endpoint required."
 
-    lines = [f"Endpoint: {endpoint}\n", "[Azure Deployed]"]
     current_deployment = CONFIG.get("deployment", "")
-    for m in AZURE_DEPLOYED:
-        if do_test:
-            text, _, latency = await _test_model(client, m, "deployed")
-            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
-            lines.append(f"  {m}: {status}")
-        else:
-            marker = " (current)" if m == current_deployment else ""
-            lines.append(f"  {m}{marker}")
+    current_model = CONFIG.get("model", "")
+    has_aws = CONFIG.get("aws_access_key") and CONFIG.get("aws_secret_key")
 
+    if do_test:
+        # Parallel test all models for maximum speed
+        all_tests = []
+        model_info = []  # (name, type, section)
+
+        for m in AZURE_DEPLOYED:
+            all_tests.append(_test_model(client, m, "deployed"))
+            model_info.append((m, "deployed", "Azure Deployed"))
+        for m in AZURE_SERVERLESS:
+            all_tests.append(_test_model(client, m, "serverless"))
+            model_info.append((m, "serverless", "Azure Serverless"))
+        for m in GOOGLE_MODELS:
+            all_tests.append(_test_model(client, m, "google"))
+            model_info.append((m, "google", "Google Vertex AI"))
+        if has_aws:
+            for m in BEDROCK_MODELS.keys():
+                all_tests.append(_test_model(client, m, "bedrock"))
+                model_info.append((m, "bedrock", "AWS Bedrock"))
+
+        # Run all tests in parallel
+        results = await asyncio.gather(*all_tests, return_exceptions=True)
+
+        # Group results by section
+        sections = {"Azure Deployed": [], "Azure Serverless": [], "Google Vertex AI": [], "AWS Bedrock": []}
+        for (name, mtype, section), result in zip(model_info, results):
+            if isinstance(result, Exception):
+                sections[section].append(f"  {name}: unavailable")
+            else:
+                text, _, latency = result
+                status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
+                sections[section].append(f"  {name}: {status}")
+
+        lines = [f"Endpoint: {endpoint}\n"]
+        for section in ["Azure Deployed", "Azure Serverless", "Google Vertex AI", "AWS Bedrock"]:
+            lines.append(f"[{section}]")
+            if section == "AWS Bedrock" and not has_aws:
+                lines.append("  (set aws_access_key and aws_secret_key to enable)")
+            else:
+                lines.extend(sections[section])
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    # Non-test mode: just list models
+    lines = [f"Endpoint: {endpoint}\n", "[Azure Deployed]"]
+    for m in AZURE_DEPLOYED:
+        marker = " (current)" if m == current_deployment else ""
+        lines.append(f"  {m}{marker}")
     lines.append("\n[Azure Serverless]")
     for m in AZURE_SERVERLESS:
-        if do_test:
-            text, _, latency = await _test_model(client, m, "serverless")
-            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
-            lines.append(f"  {m}: {status}")
-        else:
-            marker = " (current)" if m == CONFIG.get("model") else ""
-            lines.append(f"  {m}{marker}")
-
+        marker = " (current)" if m == current_model else ""
+        lines.append(f"  {m}{marker}")
     lines.append("\n[Google Vertex AI]")
     for m in GOOGLE_MODELS:
-        if do_test:
-            text, _, latency = await _test_model(client, m, "google")
-            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
-            lines.append(f"  {m}: {status}")
-        else:
-            lines.append(f"  {m}")
-
+        lines.append(f"  {m}")
     lines.append("\n[AWS Bedrock]")
-    if CONFIG.get("aws_access_key") and CONFIG.get("aws_secret_key"):
+    if has_aws:
         for m in BEDROCK_MODELS.keys():
-            if do_test:
-                text, _, latency = await _test_model(client, m, "bedrock")
-                status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
-                lines.append(f"  {m}: {status}")
-            else:
-                lines.append(f"  {m}")
+            lines.append(f"  {m}")
     else:
         lines.append("  (set aws_access_key and aws_secret_key to enable)")
     return "\n".join(lines)
