@@ -40,9 +40,10 @@ Single-file Python MCP server bridging Claude Code to Azure AI Foundry models.
 ## Endpoint Types
 | Type | URL Pattern | Used For |
 |------|-------------|----------|
-| deployed | `/openai/deployments/{name}/chat/completions` | GPT models |
-| serverless | `/models/chat/completions` | Llama, DeepSeek, Phi, Grok |
+| deployed | `/openai/deployments/{name}/chat/completions` | GPT, o1, o4 models |
+| serverless | `/models/chat/completions` | Llama, DeepSeek, Phi, Grok, Cohere, Mistral |
 | google | Vertex AI `/chat/completions` | Gemini models |
+| bedrock | AWS Bedrock Converse API | Claude, Nova, Llama 4, Writer |
 
 ## MCP Tools (11)
 `chat`, `multi_chat`, `configure`, `reset`, `clear_cache`, `status`, `models`, `create_session`, `switch_session`, `delete_session`, `list_sessions`
@@ -54,7 +55,7 @@ Single-file Python MCP server bridging Claude Code to Azure AI Foundry models.
 - **Serverless free tier**: 15 req/day per model
 
 ## Env Vars (override config file)
-`AZURE_AI_API_KEY`, `AZURE_AI_ENDPOINT`, `GOOGLE_API_KEY`, `GOOGLE_PROJECT`, `GOOGLE_REGION`
+`AZURE_AI_API_KEY`, `AZURE_AI_ENDPOINT`, `GOOGLE_API_KEY`, `GOOGLE_PROJECT`, `GOOGLE_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
 
 ## How to Run
 ```bash

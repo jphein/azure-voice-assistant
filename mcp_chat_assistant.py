@@ -58,6 +58,20 @@ DEFAULTS = {
 
 # ── Model Catalogs ──────────────────────────────────────────────────────────
 
+# Azure AI Foundry models
+AZURE_DEPLOYED = ["gpt-5.3-chat", "o1", "o4-mini"]
+AZURE_SERVERLESS = [
+    "grok-3", "grok-3-mini",
+    "Meta-Llama-3.1-405B-Instruct", "Meta-Llama-3.1-8B-Instruct",
+    "Llama-3.2-11B-Vision-Instruct", "Llama-3.2-90B-Vision-Instruct",
+    "Phi-4", "DeepSeek-R1",
+    "Cohere-command-r-plus-08-2024", "Cohere-command-r-08-2024",
+    "Codestral-2501", "Ministral-3B",
+]
+
+# Google Vertex AI models
+GOOGLE_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.1-pro-preview"]
+
 # AWS Bedrock model IDs (cross-region inference profiles)
 BEDROCK_MODELS = {
     # Anthropic Claude 4.x
@@ -77,8 +91,6 @@ BEDROCK_MODELS = {
     # Writer
     "palmyra-x4": "us.writer.palmyra-x4-v1:0",
     "palmyra-x5": "us.writer.palmyra-x5-v1:0",
-    # TwelveLabs
-    "pegasus-1.2": "us.twelvelabs.pegasus-1-2-v1:0",
 }
 
 CONFIG = {}
@@ -1052,19 +1064,19 @@ async def _handle_models(client, args, progress_token):
     endpoint = CONFIG.get("endpoint", "")
     if not api_key or not endpoint: return "Error: api_key and endpoint required."
 
-    lines = [f"Endpoint: {endpoint}\n", "[Deployed]"]
-    deployment = CONFIG.get("deployment", "")
-    if deployment:
+    lines = [f"Endpoint: {endpoint}\n", "[Azure Deployed]"]
+    current_deployment = CONFIG.get("deployment", "")
+    for m in AZURE_DEPLOYED:
         if do_test:
-            text, _, latency = await _test_model(client, deployment, "deployed")
-            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else text[:60]
-            lines.append(f"  {deployment}: {status}")
+            text, _, latency = await _test_model(client, m, "deployed")
+            status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
+            lines.append(f"  {m}: {status}")
         else:
-            lines.append(f"  {deployment} (current)")
+            marker = " (current)" if m == current_deployment else ""
+            lines.append(f"  {m}{marker}")
 
-    lines.append("\n[Serverless]")
-    models = ["grok-3", "Meta-Llama-3.1-405B-Instruct", "DeepSeek-R1", "Phi-4"]
-    for m in models:
+    lines.append("\n[Azure Serverless]")
+    for m in AZURE_SERVERLESS:
         if do_test:
             text, _, latency = await _test_model(client, m, "serverless")
             status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
@@ -1073,9 +1085,8 @@ async def _handle_models(client, args, progress_token):
             marker = " (current)" if m == CONFIG.get("model") else ""
             lines.append(f"  {m}{marker}")
 
-    lines.append("\n[Google AI]")
-    google_models = ["gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"]
-    for m in google_models:
+    lines.append("\n[Google Vertex AI]")
+    for m in GOOGLE_MODELS:
         if do_test:
             text, _, latency = await _test_model(client, m, "google")
             status = f"OK ({latency:.0f}ms)" if not text.startswith("Error") else "unavailable"
